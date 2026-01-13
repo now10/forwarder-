@@ -1,30 +1,27 @@
-#!/usr/bin/env bash
-# Build script that definitely works
+#!/bin/bash
+# Build script without tput
 
-echo "🚀 Starting build..."
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+RESET='\033[0m'
 
-# Create virtual environment if it doesn't exist
-if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv .venv
-fi
+echo -e "${BLUE}🚀 Starting build process...${RESET}"
 
-# Activate virtual environment
-source .venv/bin/activate
+# Install system dependencies
+apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
-echo "Upgrading pip..."
+# Install Python dependencies
+echo -e "${BLUE}📦 Installing Python dependencies...${RESET}"
 pip install --upgrade pip
-
-# Install dependencies
-echo "Installing dependencies..."
-pip install fastapi uvicorn sqlalchemy psycopg2-binary alembic
-
-# Install remaining packages
-pip install pydantic python-jose[cryptography] passlib[bcrypt] telethon redis python-dotenv
+pip install -r requirements.txt --timeout 100 --retries 5
 
 # Create directories
 mkdir -p uploads
 mkdir -p /tmp/uploads
+chmod -R 755 uploads
 
-echo "✅ Build completed!"
+echo -e "${GREEN}✅ Build completed successfully!${RESET}"
