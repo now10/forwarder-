@@ -1,34 +1,11 @@
-# FastAPI Stack
 fastapi
-uvicorn[standard]
-python-multipart
-
-# Database
+uvicorn
 sqlalchemy
 psycopg2-binary
 alembic
-
-# Pydantic (let pip choose compatible versions)
 pydantic
-pydantic-settings
-email-validator
-
-# Authentication
 python-jose[cryptography]
 passlib[bcrypt]
-cryptography
-
-# Telegram
 telethon
-
-# Async & Redis
-aiofiles
 redis
-
-# Environment & Logging
 python-dotenv
-structlog
-
-# Utilities
-requests
-httpx
