@@ -1,30 +1,25 @@
 #!/usr/bin/env bash
-# Render Build Script - Fixed for Python path
+# Simple build script for Render
 
-echo "🚀 Starting build process on Render..."
+echo "🚀 Installing dependencies..."
 
-# Set Python path explicitly
-PYTHON_PATH="/opt/render/project/src/.venv/bin/python3"
-echo "Python path: $PYTHON_PATH"
+# Upgrade pip first
+python -m pip install --upgrade pip
 
-# Upgrade pip
-$PYTHON_PATH -m pip install --upgrade pip
+# Install requirements (let pip resolve dependencies)
+pip install \
+    fastapi \
+    uvicorn \
+    sqlalchemy \
+    psycopg2-binary \
+    alembic \
+    pydantic \
+    python-jose[cryptography] \
+    passlib[bcrypt] \
+    telethon \
+    redis \
+    python-dotenv \
+    aiofiles \
+    structlog
 
-# Install system dependencies for psycopg2
-apt-get update && apt-get install -y \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-echo "📦 Installing Python dependencies..."
-$PYTHON_PATH -m pip install -r requirements.txt --timeout 100 --retries 5
-
-# Create necessary directories
-mkdir -p uploads
-mkdir -p /tmp/uploads
-
-# Set permissions
-chmod -R 755 uploads
-
-echo "✅ Build completed successfully!"
+echo "✅ Dependencies installed"
