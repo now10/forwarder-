@@ -3,46 +3,38 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
-# Database (Use asyncpg for PostgreSQL on Render)
+# Database - Use psycopg2 instead of asyncpg
 sqlalchemy==2.0.23
-asyncpg==0.29.0
+psycopg2-binary==2.9.9  # Binary version, no compilation needed
 alembic==1.12.1
-psycopg2-binary==2.9.9  # Keep binary for Render compatibility
 
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 cryptography==41.0.7
 
-# Telegram
-telethon==1.34.0
-
-# Pydantic
-pydantic==2.5.0
+# Pydantic - Use compatible versions
+pydantic==1.10.13  # Version 1 doesn't need Rust
 pydantic-settings==2.1.0
 email-validator==2.1.0
 
-# Async
-aiofiles==23.2.1
-aioredis==2.0.1
+# Telegram
+telethon==1.34.0
 
-# Email (optional - disable if not using)
-# jinja2==3.1.2
-# premailer==3.10.0
+# Async (lightweight)
+aiofiles==23.2.1
+aiosqlite==0.19.0  # For local SQLite if needed
 
 # Environment
 python-dotenv==1.0.0
 
-# Monitoring
+# Redis
+redis==5.0.1
+# Remove hiredis (needs compilation)
+
+# Logging
 structlog==23.2.0
 
-# Redis (Render Redis support)
-redis==5.0.1
-hiredis==2.2.3
-
-# Optional: For free tier monitoring
-sentry-sdk==1.38.0  # Free error tracking
-
-# Free monitoring tools
-sentry-sdk==1.38.0
-logtail-python==0.1.1  # For BetterStack Logtail (free tier)
+# Other utilities
+requests==2.31.0
+httpx==0.25.2
