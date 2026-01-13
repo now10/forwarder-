@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Render Build Script - Fixed for Rust dependencies
+# Render Build Script - Fixed for Python path
 
-echo "🚀 Starting optimized build for Render..."
+echo "🚀 Starting build process on Render..."
 
-# Upgrade pip with timeout
-pip install --upgrade pip --timeout 100 --retries 5
+# Set Python path explicitly
+PYTHON_PATH="/opt/render/project/src/.venv/bin/python3"
+echo "Python path: $PYTHON_PATH"
+
+# Upgrade pip
+$PYTHON_PATH -m pip install --upgrade pip
 
 # Install system dependencies for psycopg2
 apt-get update && apt-get install -y \
@@ -12,29 +16,9 @@ apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies with pre-download
+# Install Python dependencies
 echo "📦 Installing Python dependencies..."
-
-# First, install packages that don't need compilation
-pip install \
-    fastapi==0.104.1 \
-    uvicorn[standard]==0.24.0 \
-    python-multipart==0.0.6 \
-    sqlalchemy==2.0.23 \
-    psycopg2-binary==2.9.9 \
-    alembic==1.12.1 \
-    pydantic==1.10.13 \
-    python-jose[cryptography]==3.3.0 \
-    passlib[bcrypt]==1.7.4 \
-    telethon==1.34.0 \
-    redis==5.0.1 \
-    aiofiles==23.2.1 \
-    structlog==23.2.0 \
-    python-dotenv==1.0.0 \
-    --timeout 100 --retries 5
-
-# Then install remaining packages
-pip install -r requirements.txt --timeout 100 --retries 5
+$PYTHON_PATH -m pip install -r requirements.txt --timeout 100 --retries 5
 
 # Create necessary directories
 mkdir -p uploads
