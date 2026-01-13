@@ -1,25 +1,30 @@
 #!/usr/bin/env bash
-# Render Start Script - Fixed for command not found
+# Start script for Render with Python 3
 
-echo "🚀 Starting Telegram Forwarder SaaS on Render..."
+echo "🚀 Starting application..."
 
-# Set Python path explicitly
-PYTHON_PATH="/opt/render/project/src/.venv/bin/python3"
-UVICORN_PATH="/opt/render/project/src/.venv/bin/uvicorn"
-echo "Python path: $PYTHON_PATH"
+# Use python3 explicitly
+PYTHON_CMD="python3"
+if command -v python3 &> /dev/null; then
+    echo "Using python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+    echo "Using python"
+else
+    # Try the Render virtual environment path
+    PYTHON_CMD="/opt/render/project/src/.venv/bin/python"
+    echo "Using venv python"
+fi
 
-# Wait for services
-sleep 3
+echo "Python command: $PYTHON_CMD"
 
-# Run database migrations (skip if fails)
-echo "📦 Attempting database migrations..."
-$PYTHON_PATH -m alembic upgrade head || echo "Migrations failed or already applied"
+# Wait a bit
+sleep 2
 
-# Start the application
+# Run migrations
+echo "📦 Running database migrations..."
+$PYTHON_CMD -m alembic upgrade head || echo "Migrations may have failed or already applied"
+
+# Start server
 echo "🌐 Starting FastAPI server..."
-exec $UVICORN_PATH app.main:app \
-    --host 0.0.0.0 \
-    --port $PORT \
-    --workers 1 \
-    --timeout-keep-alive 30 \
-    --log-level info
+exec $PYTHON_CMD -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info
