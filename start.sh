@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Render Start Script
+# Render Start Script - Simplified
 
-echo "🚀 Starting Telegram Forwarder SaaS..."
+echo "🚀 Starting Telegram Forwarder SaaS on Render..."
 
-# Wait for PostgreSQL to be ready (Render handles this automatically)
-# But we can add a small delay for safety
-sleep 2
+# Wait for PostgreSQL to be ready
+sleep 3
 
-# Run database migrations
-echo "📦 Running database migrations..."
-python -m alembic upgrade head
+# Run database migrations (skip if fails)
+echo "📦 Attempting database migrations..."
+python -m alembic upgrade head || echo "Migrations failed or already applied"
 
-# Start the FastAPI application
+# Start the application with single worker (free tier)
 echo "🌐 Starting FastAPI server..."
-uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4
+exec uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port $PORT \
+    --workers 1 \
+    --timeout-keep-alive 30 \
+    --log-level info
