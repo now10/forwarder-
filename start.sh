@@ -1,18 +1,20 @@
-#!/usr/bin/env bash
-# Start script that definitely works
+#!/bin/bash
+# Start script without tput
 
-echo "🚀 Starting application..."
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+RESET='\033[0m'
 
-# Activate virtual environment
-source .venv/bin/activate
+echo -e "${BLUE}🚀 Starting Telegram Forwarder SaaS...${RESET}"
 
-# Change to app directory
-cd /opt/render/project/src
+# Wait for PostgreSQL
+sleep 2
 
 # Run migrations
-echo "Running migrations..."
-python -m alembic upgrade head || echo "Migrations may have failed"
+echo -e "${BLUE}📦 Running database migrations...${RESET}"
+python -m alembic upgrade head || echo -e "${RED}⚠️  Migrations failed or already applied${RESET}"
 
 # Start server
-echo "Starting FastAPI..."
-exec python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+echo -e "${BLUE}🌐 Starting FastAPI server...${RESET}"
+exec uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
