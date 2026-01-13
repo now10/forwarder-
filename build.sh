@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# Build script for Render
+# Build script that definitely works
 
 echo "🚀 Starting build..."
 
-# Use python3 for everything
-PYTHON_CMD="python3"
-if ! command -v python3 &> /dev/null; then
-    PYTHON_CMD="python"
+# Create virtual environment if it doesn't exist
+if [ ! -d ".venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv .venv
 fi
 
-echo "Using Python: $PYTHON_CMD"
+# Activate virtual environment
+source .venv/bin/activate
 
-# Upgrade pip using the detected Python
-$PYTHON_CMD -m pip install --upgrade pip
+# Upgrade pip
+echo "Upgrading pip..."
+pip install --upgrade pip
 
 # Install dependencies
-echo "📦 Installing dependencies..."
-$PYTHON_CMD -m pip install -r requirements.txt
+echo "Installing dependencies..."
+pip install fastapi uvicorn sqlalchemy psycopg2-binary alembic
+
+# Install remaining packages
+pip install pydantic python-jose[cryptography] passlib[bcrypt] telethon redis python-dotenv
 
 # Create directories
 mkdir -p uploads
 mkdir -p /tmp/uploads
-chmod -R 755 uploads
 
 echo "✅ Build completed!"
