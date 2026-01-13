@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
-# Simple build script for Render
+# Build script for Render
 
-echo "🚀 Installing dependencies..."
+echo "🚀 Starting build..."
 
-# Upgrade pip first
-python -m pip install --upgrade pip
+# Use python3 for everything
+PYTHON_CMD="python3"
+if ! command -v python3 &> /dev/null; then
+    PYTHON_CMD="python"
+fi
 
-# Install requirements (let pip resolve dependencies)
-pip install \
-    fastapi \
-    uvicorn \
-    sqlalchemy \
-    psycopg2-binary \
-    alembic \
-    pydantic \
-    python-jose[cryptography] \
-    passlib[bcrypt] \
-    telethon \
-    redis \
-    python-dotenv \
-    aiofiles \
-    structlog
+echo "Using Python: $PYTHON_CMD"
 
-echo "✅ Dependencies installed"
+# Upgrade pip using the detected Python
+$PYTHON_CMD -m pip install --upgrade pip
+
+# Install dependencies
+echo "📦 Installing dependencies..."
+$PYTHON_CMD -m pip install -r requirements.txt
+
+# Create directories
+mkdir -p uploads
+mkdir -p /tmp/uploads
+chmod -R 755 uploads
+
+echo "✅ Build completed!"
