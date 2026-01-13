@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: telegram-forwarder-api
+    runtime: python
+    plan: free
+    region: ohio  # or singapore, oregon, frankfurt
+    buildCommand: ./build.sh
+    startCommand: ./start.sh
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: telegram-saas-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: telegram-saas-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: false
+      - key: FRONTEND_URL
+        value: https://your-frontend.onrender.com  # Update this
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+
+databases:
+  - name: telegram-saas-db
+    plan: free
+    databaseName: telegram_saas
+    user: telegram_saas_user
+
+redis:
+  - name: telegram-saas-redis
+    plan: free
+    ipAllowList: []  # Allow all (or restrict to your services)

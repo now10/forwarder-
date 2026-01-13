@@ -1,0 +1,425 @@
+-- ============================================
+-- BUSINESS-GRADE DATABASE SCHEMA
+-- For Telegram Forwarding SaaS Platform
+-- ============================================
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ================= USERS & ACCOUNTS =================
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255),
+    company_name VARCHAR(255),
+    phone VARCHAR(50),
+    
+    -- Account status
+    is_active BOOLEAN DEFAULT true,
+    is_verified BOOLEAN DEFAULT false,
+    verification_token VARCHAR(255),
+    verification_expires TIMESTAMP,
+    
+    -- Subscription
+    subscription_tier VARCHAR(50) DEFAULT 'free',
+    subscription_status VARCHAR(50) DEFAULT 'inactive',
+    subscription_id VARCHAR(255),
+    current_period_end TIMESTAMP,
+    
+    -- Limits (based on tier)
+    max_sources INTEGER DEFAULT 1,
+    max_destinations INTEGER DEFAULT 1,
+    max_keywords INTEGER DEFAULT 5,
+    monthly_message_limit INTEGER DEFAULT 1000,
+    messages_used_this_month INTEGER DEFAULT 0,
+    
+    -- Security
+    two_factor_enabled BOOLEAN DEFAULT false,
+    two_factor_secret VARCHAR(255),
+    last_login TIMESTAMP,
+    failed_login_attempts INTEGER DEFAULT 0,
+    
+    -- Metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    timezone VARCHAR(50) DEFAULT 'UTC',
+    language VARCHAR(10) DEFAULT 'en'
+);
+
+-- User profiles for additional info
+CREATE TABLE user_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    avatar_url TEXT,
+    country VARCHAR(100),
+    industry VARCHAR(100),
+    use_case TEXT,  -- How they plan to use the service
+    telegram_username VARCHAR(255),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ================= TELEGRAM CONNECTIONS =================
+CREATE TABLE telegram_accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- Telegram credentials (ENCRYPTED in application)
+    api_id VARCHAR(100) NOT NULL,
+    api_hash VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(50) NOT NULL,
+    session_data TEXT,  -- Encrypted Telethon session
+    
+    -- Account info from Telegram
+    telegram_user_id BIGINT,
+    telegram_username VARCHAR(255),
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
+    
+    -- Status
+    is_active BOOLEAN DEFAULT true,
+    is_connected BOOLEAN DEFAULT false,
+    last_sync TIMESTAMP,
+    
+    -- Limits and stats
+    total_messages_forwarded INTEGER DEFAULT 0,
+    last_forwarded_at TIMESTAMP,
+    
+    -- Security
+    connection_token VARCHAR(255) UNIQUE,
+    expires_at TIMESTAMP,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(user_id, phone_number)
+);
+
+-- ================= CHATS/GROUPS =================
+CREATE TABLE telegram_chats (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    telegram_account_id UUID REFERENCES telegram_accounts(id) ON DELETE CASCADE,
+    
+    -- Telegram data
+    chat_id BIGINT NOT NULL,  -- Telegram's internal ID (negative for groups)
+    chat_type VARCHAR(50) NOT NULL,  -- 'private', 'group', 'channel', 'supergroup'
+    chat_title VARCHAR(255),
+    chat_username VARCHAR(255),  -- @username if public
+    invite_link TEXT,
+    
+    -- Access info
+    is_accessible BOOLEAN DEFAULT true,
+    last_accessed TIMESTAMP,
+    permissions_json JSONB,  -- Store Telegram permissions
+    
+    -- Business categorization
+    is_source BOOLEAN DEFAULT false,
+    is_destination BOOLEAN DEFAULT false,
+    auto_discovered BOOLEAN DEFAULT true,
+    
+    -- Statistics
+    total_messages INTEGER DEFAULT 0,
+    last_message_id BIGINT DEFAULT 0,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(telegram_account_id, chat_id)
+);
+
+-- ================= FORWARDING RULES =================
+CREATE TABLE forwarding_rules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    telegram_account_id UUID REFERENCES telegram_accounts(id) ON DELETE CASCADE,
+    
+    -- Source and destination
+    source_chat_id UUID REFERENCES telegram_chats(id) ON DELETE CASCADE,
+    destination_chat_id UUID REFERENCES telegram_chats(id) ON DELETE CASCADE,
+    
+    -- Rule configuration
+    rule_name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    forward_mode VARCHAR(50) DEFAULT 'all',  -- 'all', 'keywords', 'regex', 'ai_filter'
+    
+    -- Filter conditions (JSON for flexibility)
+    keywords TEXT[],  -- Array of keywords
+    regex_patterns TEXT[],  -- Array of regex patterns
+    filter_logic VARCHAR(20) DEFAULT 'any',  -- 'any', 'all', 'none'
+    case_sensitive BOOLEAN DEFAULT false,
+    
+    -- Advanced filters
+    min_message_length INTEGER,
+    max_message_length INTEGER,
+    allowed_senders TEXT[],  -- Array of usernames/user_ids
+    excluded_senders TEXT[],
+    
+    -- Time-based rules
+    timezone VARCHAR(50),
+    active_hours JSONB,  -- {"start": "09:00", "end": "17:00", "days": [1,2,3,4,5]}
+    enable_scheduling BOOLEAN DEFAULT false,
+    
+    -- Forwarding behavior
+    include_media BOOLEAN DEFAULT true,
+    include_links BOOLEAN DEFAULT true,
+    include_forwarded BOOLEAN DEFAULT true,
+    add_prefix TEXT,  -- "[ALERT]" or similar
+    add_suffix TEXT,
+    
+    -- Rate limiting
+    max_forwards_per_hour INTEGER DEFAULT 100,
+    min_interval_seconds INTEGER DEFAULT 0,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_user_active (user_id, is_active)
+);
+
+-- ================= MESSAGE LOGS =================
+CREATE TABLE message_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    rule_id UUID REFERENCES forwarding_rules(id) ON DELETE SET NULL,
+    telegram_account_id UUID REFERENCES telegram_accounts(id) ON DELETE CASCADE,
+    
+    -- Message info
+    source_chat_id BIGINT,
+    destination_chat_id BIGINT,
+    telegram_message_id BIGINT,
+    forwarded_message_id BIGINT,
+    
+    -- Content (for auditing)
+    message_text TEXT,
+    sender_username VARCHAR(255),
+    sender_id BIGINT,
+    has_media BOOLEAN DEFAULT false,
+    media_type VARCHAR(50),
+    
+    -- Processing info
+    matched_keywords TEXT[],
+    matched_patterns TEXT[],
+    processing_time_ms INTEGER,
+    
+    -- Status
+    status VARCHAR(50) DEFAULT 'success',  -- 'success', 'failed', 'filtered', 'rate_limited'
+    error_message TEXT,
+    
+    -- Metadata
+    forwarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_forwarded_time (forwarded_at),
+    INDEX idx_user_messages (telegram_account_id, forwarded_at)
+);
+
+-- ================= KEYWORD GROUPS =================
+CREATE TABLE keyword_groups (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    group_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    keywords TEXT[] NOT NULL,
+    is_shared BOOLEAN DEFAULT false,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ================= TEAM COLLABORATION =================
+CREATE TABLE teams (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    team_name VARCHAR(255) NOT NULL,
+    team_slug VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE team_members (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    role VARCHAR(50) DEFAULT 'member',  -- 'owner', 'admin', 'member', 'viewer'
+    permissions JSONB,  -- Specific permissions override
+    
+    invited_by UUID REFERENCES users(id),
+    invitation_token VARCHAR(255),
+    invitation_status VARCHAR(50) DEFAULT 'pending',  -- 'pending', 'accepted', 'rejected'
+    
+    joined_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(team_id, user_id)
+);
+
+-- ================= BILLING & SUBSCRIPTIONS =================
+CREATE TABLE subscription_plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    plan_id VARCHAR(100) UNIQUE NOT NULL,  -- 'free', 'pro', 'business', 'enterprise'
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    
+    -- Limits
+    max_sources INTEGER NOT NULL,
+    max_destinations INTEGER NOT NULL,
+    max_keyword_groups INTEGER NOT NULL,
+    max_team_members INTEGER NOT NULL,
+    monthly_message_limit INTEGER NOT NULL,
+    
+    -- Features (as JSON array)
+    features JSONB NOT NULL,
+    
+    -- Pricing
+    amount_monthly DECIMAL(10,2),
+    amount_yearly DECIMAL(10,2),
+    currency VARCHAR(3) DEFAULT 'USD',
+    stripe_price_id_monthly VARCHAR(255),
+    stripe_price_id_yearly VARCHAR(255),
+    
+    is_active BOOLEAN DEFAULT true,
+    is_public BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE invoices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    invoice_number VARCHAR(100) UNIQUE NOT NULL,
+    stripe_invoice_id VARCHAR(255),
+    stripe_payment_intent_id VARCHAR(255),
+    
+    amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD',
+    tax_amount DECIMAL(10,2) DEFAULT 0,
+    
+    status VARCHAR(50) DEFAULT 'draft',  -- 'draft', 'open', 'paid', 'void', 'uncollectible'
+    due_date TIMESTAMP,
+    paid_at TIMESTAMP,
+    
+    billing_details JSONB,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ================= SYSTEM LOGS =================
+CREATE TABLE system_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    level VARCHAR(20) NOT NULL,  -- 'info', 'warning', 'error', 'critical'
+    component VARCHAR(100) NOT NULL,  -- 'auth', 'telegram', 'forwarding', 'billing'
+    
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    telegram_account_id UUID REFERENCES telegram_accounts(id) ON DELETE SET NULL,
+    
+    message TEXT NOT NULL,
+    details JSONB,
+    ip_address INET,
+    user_agent TEXT,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_logs_created (created_at),
+    INDEX idx_logs_user (user_id, created_at)
+);
+
+-- ================= API KEYS =================
+CREATE TABLE api_keys (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    key_name VARCHAR(255) NOT NULL,
+    api_key VARCHAR(255) UNIQUE NOT NULL,
+    api_secret VARCHAR(255) NOT NULL,
+    
+    permissions JSONB NOT NULL,  -- What this key can do
+    last_used TIMESTAMP,
+    usage_count INTEGER DEFAULT 0,
+    
+    expires_at TIMESTAMP,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_api_key (api_key)
+);
+
+-- ================= NOTIFICATIONS =================
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    
+    type VARCHAR(50) NOT NULL,  -- 'info', 'warning', 'error', 'success'
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    
+    is_read BOOLEAN DEFAULT false,
+    read_at TIMESTAMP,
+    
+    action_url TEXT,
+    action_label VARCHAR(100),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- INDEXES FOR PERFORMANCE
+-- ============================================
+
+-- Index for fast chat lookups
+CREATE INDEX idx_chats_telegram ON telegram_chats(telegram_account_id, chat_type, is_accessible);
+
+-- Index for active forwarding rules
+CREATE INDEX idx_active_rules ON forwarding_rules(is_active, user_id) WHERE is_active = true;
+
+-- Index for message logs searching
+CREATE INDEX idx_logs_search ON message_logs USING gin(matched_keywords);
+
+-- Index for user activity
+CREATE INDEX idx_user_activity ON users(is_active, subscription_status, subscription_tier);
+
+-- ============================================
+-- FUNCTIONS & TRIGGERS
+-- ============================================
+
+-- Auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Apply trigger to all tables with updated_at
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_telegram_accounts_updated_at BEFORE UPDATE ON telegram_accounts
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_telegram_chats_updated_at BEFORE UPDATE ON telegram_chats
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_forwarding_rules_updated_at BEFORE UPDATE ON forwarding_rules
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to reset monthly usage
+CREATE OR REPLACE FUNCTION reset_monthly_usage()
+RETURNS void AS $$
+BEGIN
+    UPDATE users 
+    SET messages_used_this_month = 0
+    WHERE is_active = true;
+END;
+$$ language 'plpgsql';

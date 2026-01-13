@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: telegram_saas
+      POSTGRES_PASSWORD: changemeinproduction
+      POSTGRES_DB: telegram_saas
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telegram_saas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://telegram_saas:changemeinproduction@db:5432/telegram_saas
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: changemeinproduction
+      DEBUG: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./uploads:/app/uploads
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build: .
+    depends_on:
+      - redis
+      - db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://telegram_saas:changemeinproduction@db:5432/telegram_saas
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: changemeinproduction
+    command: celery -A app.core.celery_app worker --loglevel=info
+
+  celery-beat:
+    build: .
+    depends_on:
+      - redis
+      - db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://telegram_saas:changemeinproduction@db:5432/telegram_saas
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: changemeinproduction
+    command: celery -A app.core.celery_app beat --loglevel=info
+
+volumes:
+  postgres_data:
+  redis_data:

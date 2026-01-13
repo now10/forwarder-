@@ -1,0 +1,10 @@
+telegram_forwarder_saas/
+├── app/                    # Your FastAPI app
+├── alembic/               # Database migrations
+├── requirements.txt       # Python dependencies
+├── runtime.txt           # Python version
+├── build.sh              # Build script (Render uses this)
+├── start.sh              # Start script
+├── render.yaml           # Render Blueprint (optional but recommended)
+├── Dockerfile            # Alternative: Docker deployment
+└── .env                  # Environment variables (not in git)
